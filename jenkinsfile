@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+    triggers{
+        pollSCM('H/2 * * * *')
+    }
+    stages {
+        stage('Info') {
+            steps {
+                sh '''printenv
+                docker --version
+                docker-compose --version
+                '''
+            }
+        }
+        stage('Clone') {
+            steps {
+                git credentialsId: '480f4a99-a001-4728-824d-8773a9a7980d', url: 'https://github.com/Hurd-Jon/hands-on-python-tutorial.git'
+            }
+        }
+        stage('Static Analysis') {
+            steps {
+                sh '''cd Chapter06/thoughts_backend
+                    docker-compose build static-analysis
+                    docker-compose run static-analysis
+                    '''
+            }
+        }
+        stage('Unit Test') {
+            steps {
+                sh '''cd Chapter06/thoughts_backend
+                    docker-compose build test-sqlite
+                    docker-compose run test-sqlite
+                    '''
+            }
+        }
+        stage('Integration Test') {
+            steps {
+                sh '''cd Chapter06/thoughts_backend
+                    docker-compose run -d db
+                    echo 'Wait 1 min for DB to start up'
+                    sleep 60
+                    echo 'Run tests'
+                    docker-compose build test-postgresql
+                    docker-compose run test-postgresql
+                    '''
+            }
+        }          
+        stage('Tag and Push') {
+            steps {
+                sh '''cd Chapter06/thoughts_backend
+                    MAJOR_NUMBER=1
+                    MINOR_NUMBER=1
+                    DOCKER_TAG="${MAJOR_NUMBER}.${MINOR_NUMBER}.${BUILD_NUMBER}"
+                    echo "TAG number will be ${DOCKER_TAG}"
+                    echo ${DOCKER_PASSWORD} | docker login -u jonhurd --password-stdin
+                    docker-compose build server
+                    docker tag thoughts_server:latest thoughts_server:$DOCKER_TAG
+                    docker tag thoughts_server:$DOCKER_TAG jonhurd/thoughts-backend:$DOCKER_TAG
+                    docker tag thoughts_server:latest jonhurd/thoughts-backend:latest
+                    docker push jonhurd/thoughts-backend:$DOCKER_TAG
+                    docker push jonhurd/thoughts-backend:latest
+                    
+                    docker-compose build db
+                    docker tag thoughts_backend_db:latest thoughts_backend_db:$DOCKER_TAG
+                    docker tag thoughts_backend_db:$DOCKER_TAG jonhurd/thoughts-db:$DOCKER_TAG
+                    docker tag thoughts_backend_db:latest jonhurd/thoughts-db:latest
+                    docker push jonhurd/thoughts-db:$DOCKER_TAG
+                    docker push jonhurd/thoughts-db:latest                    
+                    
+                    
+                    '''
+            }
+        }
+        stage('Deploy to Dev') {
+            steps {
+                sh '''cd Chapter06/thoughts_backend
+                    kubectl apply -f ./kubernetes/deployment-microk8s.yaml
+                    kubectl apply -f ./kubernetes/service.yaml
+                    '''
+            }
+        }            
+    }
+}

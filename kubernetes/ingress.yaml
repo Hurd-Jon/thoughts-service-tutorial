@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /   #new 
+  name: thoughts-backend-ingress
+  namespace: example
+spec:
+#  tls:
+#  - hosts:
+#    - thoughts.example.local
+#    secretName: marcel-tls-secret
+  rules:
+  - host: thoughts.example.local
+    http:
+      paths:     
+      - path: /
+        backend:
+          serviceName: thoughts-service
+          servicePort: 80
+
